@@ -26,6 +26,7 @@ from matplotlib.patches import Patch
 #GENERATES THE MATRIX OF S states
 
 # adapted from gen_A in BalloonModelNet
+# FOR few ROIs
 def gen_A(N_nds=5, N_conn=3, seed = None, sym=False):
     A = np.eye(N_nds)
     node_pairs = []
@@ -47,7 +48,6 @@ def gen_A(N_nds=5, N_conn=3, seed = None, sym=False):
         A = A + A.T - np.diag(A.diagonal())
 
     return A
-
 # Generate conectivity matrices for each state
 def gen_states_A(S, D, N_conns, sym=False, seed=None):
     As = []
@@ -61,6 +61,101 @@ def gen_states_A(S, D, N_conns, sym=False, seed=None):
     #print(As)
     return np.array(As)
 
+# FOR more than 30 ROIs 
+def gen_modular_A(N_nds=90,
+                  n_modules_diag=6,
+                  n_extra_per_module=3,  
+                  intra_range=(0.6, 1.0),
+                  seed=None,
+                  sym=True):
+
+    if seed is not None:
+        rn.seed(seed)
+        np.random.seed(seed)
+
+    A = np.eye(N_nds)
+
+    # Generates sizes of modules
+    A_max = rn.randint(int(N_nds * 0.75), N_nds)
+    sizes = np.random.multinomial(A_max, [1/n_modules_diag]*n_modules_diag)
+
+    # Initial positions
+    start_positions = sorted(
+        np.random.choice(np.arange(N_nds), n_modules_diag, replace=False)
+    )
+
+    order = np.argsort(sizes)[::-1] # Larger modules first
+    modules = []
+    used = np.zeros(N_nds, dtype=bool)
+
+    # Contiguous modules
+    for k in order:
+        size = sizes[k]
+        placed = False
+        for start in start_positions:
+            if start + size <= N_nds and not used[start:start+size].any():
+                modules.append(list(range(start, start+size)))
+                used[start:start+size] = True
+                placed = True
+                break
+
+        if not placed:
+            # fallback
+            for start in range(N_nds - size):
+                if not used[start:start+size].any():
+                    modules.append(list(range(start, start+size)))
+                    used[start:start+size] = True
+                    break
+
+    # Extra node per module
+    available = np.where(~used)[0].tolist()
+
+    for i in range(len(modules)):
+        n_extra = min(n_extra_per_module, len(available))
+        if n_extra > 0:
+            extra_nodes = rn.sample(available, n_extra)
+            modules[i].extend(extra_nodes)
+
+            # remove availables
+            for n in extra_nodes:
+                available.remove(n)
+
+    # Connectivity intra-modules
+    for mod in modules:
+        for i in mod:
+            for j in mod:
+                if i > j:
+                    A[i, j] = rn.uniform(*intra_range)
+
+    if sym:
+        A = A + A.T - np.diag(np.diagonal(A))
+
+    return A, modules
+def gen_states_modular_A(S, N_nodes=90, n_modules=(3,6),
+                         intra_range=(0.6,1.0),
+                         n_extra_per_module=3,
+                         sym=True,
+                         seed=None):
+  
+    
+
+    As = []
+    for k in range(S):
+        n_modules_diag = rn.randint(*n_modules)
+        A,_ = gen_modular_A(
+            N_nds=N_nodes,
+            n_modules_diag=n_modules_diag,
+            n_extra_per_module=n_extra_per_module,
+            intra_range=intra_range,
+            seed=seed,
+            sym=sym
+        )
+        if seed is not None:
+            seed += 5 
+
+        As.append(A)
+
+    return np.array(As)
 # GENERATES THE U ARRAY WITH DYNAMIC STATES
 
 # based in the function in BallonModelNet but with non_posible_pos added
