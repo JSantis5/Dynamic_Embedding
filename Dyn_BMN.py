@@ -551,7 +551,7 @@ def StimulusToNeural_piecewise(timing, u, const, C_list, state_array, segm_dur,T
     newstim = np.concatenate([f(t_all)[:, np.newaxis] for f in interpolators], axis=1)
     neur = newstim - I
     neur[neur < 0] = 0
-    neur = np.clip(neur, 0, 3.0) # Buxton (1998) and Friston (2000).
+    neur = np.clip(neur, 0, 2.0) # Buxton (1998) and Friston (2000).
 
     return t_all, neur
 
@@ -613,6 +613,8 @@ def NeuraltoFlow(timing, neuralresp):
 
     flow = psoln[:,0]
     vascsignal = psoln[:,1]
+
+    flow = np.clip(flow, 1e-6, 8.0) # prevents inestabilities
 
     return t, flow, vascsignal
 
